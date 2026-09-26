@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<!--
+  tests/storage-and-state.test.html
+  Unit tests — Task 11.2: empty state, storage load, storage unavailable,
+  delete failure, Chart.js CDN failure, category colors.
+
+  Open this file in a browser (e.g. via Laragon at
+  http://localhost/CodingCamp-21Sept26-KafiNurHikmah/tests/storage-and-state.test.html).
+
+  Requirements covered: 2.4, 2.5, 3.4, 4.4, 4.5, 5.3, 5.4, 7.5
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task 11.2 — Storage &amp; State Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; font-size: 14px; background: #f5f5f5; color: #212121; padding: 24px; }
+    h1   { font-size: 20px; margin-bottom: 4px; }
+    h2   { font-size: 16px; margin: 20px 0 6px; color: #1a237e; }
+    #summary { font-size: 15px; font-weight: 700; margin: 16px 0; padding: 10px 16px; border-radius: 6px; }
+    #summary.pass  { background: #e8f5e9; color: #1b5e20; border: 1px solid #66bb6a; }
+    #summary.fail  { background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; }
+    .test-result { padding: 5px 8px; margin: 3px 0; border-radius: 4px; font-size: 13px; }
+    .test-result.pass { background: #e8f5e9; color: #1b5e20; }
+    .test-result.fail { background: #ffebee; color: #b71c1c; }
+    pre  { background: #fff3cd; border: 1px solid #ffc107; padding: 8px 12px; border-radius: 4px;
+           font-size: 12px; margin: 4px 0 8px; white-space: pre-wrap; word-break: break-all; }
+    /* Hidden app DOM — tests manipulate this directly */
+    #app-root { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Task 11.2 — Storage &amp; State Unit Tests</h1>
+<p>Requirements: 2.4, 2.5, 3.4, 4.4, 4.5, 5.3, 5.4, 7.5</p>
+<div id="summary">Running…</div>
+<div id="results"></div>
+
+<!--
+  ====================================================================
+  Hidden DOM replica — mirrors index.html structure used by app.js.
+  app.js accesses elements by id; we must keep all ids in scope.
+  ====================================================================
+-->
+<div id="app-root" aria-hidden="true">
+  <div id="storage-warning" style="display:none;">
+    <span>Warning</span>
+    <button type="button" id="storage-warning-close">✕</button>
+  </div>
+  <section id="form-section">
+    <form id="expense-form">
+      <div class="field-group">
+        <input type="text"   id="input-name"     />
+        <span class="field-error" id="error-name"></span>
+      </div>
+      <div class="field-group">
+        <input type="number" id="input-amount"   />
+        <span class="field-error" id="error-amount"></span>
+      </div>
+      <div class="field-group">
+        <select id="input-category">
+          <option value="">--</option>
+          <option value="Food">Food</option>
+          <option value="Transport">Transport</option>
+          <option value="Fun">Fun</option>
+        </select>
+        <span class="field-error" id="error-category"></span>
+      </div>
+      <button type="submit">Add Expense</button>
+    </form>
+  </section>
+  <section id="balance-section">
+    <span id="balance-value">0.00</span>
+  </section>
+  <section id="list-section">
+    <ul id="transaction-list" aria-label="Transaction list">
+      <li id="empty-state-message">No expenses recorded yet.</li>
+    </ul>
+  </section>
+  <section id="chart-section">
+    <div id="chart-container">
+      <div id="chart-fallback" style="display:none;">Chart could not be loaded.</div>
+      <p id="chart-no-data">No data to display.</p>
+      <canvas id="expense-chart"></canvas>
+    </div>
+  </section>
+</div>
+
+<script>
+// ============================================================
+// Minimal test harness
+// ============================================================
+const _results = [];
+let _currentGroup = '';
+
+function group(name) {
+  _currentGroup = name;
+}
+
+function assert(description, condition, detail) {
+  _results.push({ group: _currentGroup, description, passed: !!condition, detail: detail || '' });
+}
+
+function assertEqual(description, actual, expected) {
+  const passed = actual === expected;
+  _results.push({
+    group: _currentGroup,
+    description,
+    passed,
+    detail: passed ? '' : `Expected: ${JSON.stringify(expected)}\nActual:   ${JSON.stringify(actual)}`
+  });
+}
+
+function renderResults() {
+  const container = document.getElementById('results');
+  const summary   = document.getElementById('summary');
+  const total  = _results.length;
+  const passed = _results.filter(r => r.passed).length;
+  const failed = total - passed;
+
+  let html = '';
+  let lastGroup = '';
+  for (const r of _results) {
+    if (r.group !== lastGroup) {
+      html += `<h2>${r.group}</h2>`;
+      lastGroup = r.group;
+    }
+    html += `<div class="test-result ${r.passed ? 'pass' : 'fail'}">
+      ${r.passed ? '✅' : '❌'} ${r.description}
+      ${r.detail ? `<pre>${r.detail}</pre>` : ''}
+    </div>`;
+  }
+  container.innerHTML = html;
+
+  summary.textContent = `${passed} / ${total} tests passed${failed > 0 ? ` — ${failed} FAILED` : ' — All OK'}`;
+  summary.className   = failed > 0 ? 'fail' : 'pass';
+}
+</script>
+
+<!--
+  Load app.js.
+  app.js registers a DOMContentLoaded listener which fires after this
+  script block; by the time our test script runs (also in DOMContentLoaded),
+  the app will have initialised once already.
+  All pure functions (validateInput, createTransaction, computeBalance,
+  computeCategoryData, CATEGORY_COLORS, etc.) are exposed as globals.
+-->
+<script src="../js/app.js"></script>
+
+<script>
+// ============================================================
+// Test utilities — localStorage mock helpers
+// ============================================================
+
+/**
+ * Replace localStorage with a simple in-memory shim.
+ * `overrides` can contain `getItem` and/or `setItem` override functions
+ * that replace the default behaviour.
+ * Returns a restore function to put the real one back.
+ */
+function mockLocalStorage(overrides) {
+  const store = {};
+  overrides = overrides || {};
+  const fake = {
+    _store: store,
+    getItem(key) {
+      if (overrides.getItem) return overrides.getItem.call(this, key);
+      return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
+    },
+    setItem(key, value) {
+      if (overrides.setItem) { overrides.setItem.call(this, key, value); return; }
+      store[key] = String(value);
+    },
+    removeItem(key)     { delete store[key]; },
+    clear()             { Object.keys(store).forEach(k => delete store[k]); },
+    get length()        { return Object.keys(store).length; },
+    key(n)              { return Object.keys(store)[n] || null; }
+  };
+  const real = Object.getOwnPropertyDescriptor(window, 'localStorage');
+  Object.defineProperty(window, 'localStorage', { value: fake, configurable: true, writable: true });
+  return function restore() {
+    if (real) {
+      Object.defineProperty(window, 'localStorage', real);
+    } else {
+      delete window.localStorage;
+    }
+  };
+}
+
+/**
+ * Reset the module-level `transactions` array and `storageAvailable` flag
+ * that live inside app.js. Because they are globals, we can reach them
+ * from here.
+ *
+ * We also clear localStorage and re-run initApp() to simulate a fresh
+ * page load inside the same document.
+ */
+function resetAppState(preloadData) {
+  // Reset DOM elements that accumulate state
+  document.getElementById('transaction-list').innerHTML =
+    '<li id="empty-state-message">No expenses recorded yet.</li>';
+  document.getElementById('balance-value').textContent = '0.00';
+  document.getElementById('storage-warning').style.display = 'none';
+  document.getElementById('chart-fallback').style.display = 'none';
+  document.getElementById('chart-no-data').style.display = '';
+  document.getElementById('expense-chart').style.display = '';
+
+  // Wipe any error toast
+  const toast = document.getElementById('error-toast');
+  if (toast) toast.remove();
+
+  // Reset app.js module-level globals so each test starts clean.
+  // storageAvailable is a `let` global in app.js — resetting it to true
+  // ensures loadTransactions() actually tries to read on the next initApp().
+  /* global storageAvailable, transactions */
+  storageAvailable = true;
+  transactions = [];
+
+  // Pre-populate localStorage if provided
+  if (preloadData !== undefined) {
+    localStorage.setItem('expense_visualizer_transactions', JSON.stringify(preloadData));
+  } else {
+    localStorage.removeItem('expense_visualizer_transactions');
+  }
+}
+
+// ============================================================
+// Minimal Chart.js stub (used by most tests so renderChart works)
+// ============================================================
+function makeChartStub() {
+  const instances = [];
+  window.Chart = function(ctx, config) {
+    const inst = { ctx, config, destroyed: false, destroy() { this.destroyed = true; } };
+    instances.push(inst);
+    return inst;
+  };
+  return instances;
+}
+
+// ============================================================
+// Run all tests after DOM is fully loaded (app.js DOMContentLoaded
+// already ran at this point)
+// ============================================================
+document.addEventListener('DOMContentLoaded', function () {
+  // -------------------------------------------------------
+  // GROUP 1: Empty State  (Req 3.4, 2.4, 4.4)
+  // -------------------------------------------------------
+  group('1. Empty State — balance 0.00, empty-state message, no-data chart');
+
+  (function testEmptyState() {
+    const restoreLS = mockLocalStorage();
+    makeChartStub();
+
+    // Simulate fresh init with nothing in storage
+    resetAppState(null);
+    initApp();
+
+    const balanceText = document.getElementById('balance-value').textContent;
+    assertEqual('Balance shows "0.00" on empty state', balanceText, '0.00');   // Req 3.4
+
+    const listEl = document.getElementById('transaction-list');
+    const emptyMsg = listEl.querySelector('#empty-state-message');
+    assert('Empty-state message element exists in list', emptyMsg !== null);   // Req 2.4
+    assert(
+      'Empty-state message text is "No expenses recorded yet."',
+      emptyMsg && emptyMsg.textContent.trim() === 'No expenses recorded yet.'
+    );
+
+    const noData = document.getElementById('chart-no-data');
+    assert('"No data" element is visible when no transactions', noData.style.display !== 'none'); // Req 4.4
+
+    const canvas = document.getElementById('expense-chart');
+    assert('Chart canvas is hidden when no transactions', canvas.style.display === 'none');
+
+    restoreLS();
+  })();
+
+  // -------------------------------------------------------
+  // GROUP 2: Storage load on init  (Req 5.3)
+  // -------------------------------------------------------
+  group('2. Storage load on init — pre-populated localStorage');
+
+  (function testStorageLoad() {
+    const restoreLS = mockLocalStorage();
+    makeChartStub();
+
+    const preloaded = [
+      { id: 'aaa1', name: 'Lunch',    amount: 12.50, category: 'Food',      createdAt: 1700000000000 },
+      { id: 'bbb2', name: 'Bus fare', amount: 3.00,  category: 'Transport', createdAt: 1700000001000 },
+      { id: 'ccc3', name: 'Cinema',   amount: 15.00, category: 'Fun',       createdAt: 1700000002000 }
+    ];
+
+    resetAppState(preloaded);
+    initApp();
+
+    const listEl = document.getElementById('transaction-list');
+    const items  = listEl.querySelectorAll('li:not(#empty-state-message)');
+    assertEqual('All 3 pre-loaded transactions appear in the list', items.length, 3); // Req 5.3
+
+    assert(
+      'First list item shows "Lunch"',
+      items[0] && items[0].querySelector('.tx-name').textContent === 'Lunch'
+    );
+    assert(
+      'Second list item shows "Bus fare"',
+      items[1] && items[1].querySelector('.tx-name').textContent === 'Bus fare'
+    );
+    assert(
+      'Third list item shows "Cinema"',
+      items[2] && items[2].querySelector('.tx-name').textContent === 'Cinema'
+    );
+
+    const expectedBalance = (12.50 + 3.00 + 15.00).toFixed(2);
+    assertEqual(
+      'Balance reflects total of pre-loaded transactions',
+      document.getElementById('balance-value').textContent,
+      expectedBalance
+    );
+
+    restoreLS();
+  })();
+
+  // -------------------------------------------------------
+  // GROUP 3: Storage unavailable  (Req 5.4)
+  // -------------------------------------------------------
+  group('3. Storage unavailable — warning banner shown, in-memory state retained');
+
+  (function testStorageUnavailable() {
+    // Mock localStorage so getItem throws (simulates SecurityError on load).
+    // resetAppState sets storageAvailable = true first, so loadTransactions
+    // will actually attempt the read and hit our throw.
+    const restoreLS = mockLocalStorage({
+      getItem(key) { throw new DOMException('SecurityError'); }
+    });
+
+    resetAppState(null);
+    initApp();
+
+    const warningEl = document.getElementById('storage-warning');
+    assert(
+      'Storage-warning banner is visible when localStorage throws on read',
+      warningEl.style.display !== 'none' && warningEl.style.display !== ''
+    ); // Req 5.4
+
+    // Verify in-memory state: list shows empty-state (no crash, graceful [])
+    const listEl = document.getElementById('transaction-list');
+    const emptyMsg = listEl.querySelector('#empty-state-message');
+    assert(
+      'In-memory state is retained (empty list rendered without crash)',
+      emptyMsg !== null
+    );
+
+    assertEqual(
+      'Balance is 0.00 when storage fails to load',
+      document.getElementById('balance-value').textContent,
+      '0.00'
+    );
+
+    restoreLS();
+  })();
+
+  // -------------------------------------------------------
+  // GROUP 4: Delete failure — rollback + error message  (Req 2.5)
+  // -------------------------------------------------------
+  group('4. Delete failure — transaction retained in list, error message shown');
+
+  (function testDeleteFailure() {
+    const restoreLS = mockLocalStorage();
+    makeChartStub();
+
+    const txs = [
+      { id: 'del-aaa', name: 'Coffee', amount: 4.50, category: 'Food',  createdAt: Date.now() },
+      { id: 'del-bbb', name: 'Train',  amount: 8.00, category: 'Transport', createdAt: Date.now() }
+    ];
+
+    resetAppState(txs);
+    initApp();
+
+    // Verify both transactions are rendered
+    const listBefore = document.getElementById('transaction-list')
+                                .querySelectorAll('[data-delete-id]');
+    assertEqual('2 transactions rendered before delete attempt', listBefore.length, 2);
+
+    // Now make saveTransactions fail on next call by making setItem throw
+    const fakeLS = window.localStorage;
+    fakeLS.setItem = function() { throw new DOMException('QuotaExceededError'); };
+
+    // Simulate click on the delete button for the first transaction
+    const deleteBtn = document.querySelector('[data-delete-id="del-aaa"]');
+    assert('Delete button for "Coffee" exists', deleteBtn !== null);
+
+    if (deleteBtn) {
+      deleteBtn.click();
+    }
+
+    // After failed save, the transaction should still be in the list (rollback)
+    const listAfter = document.getElementById('transaction-list')
+                               .querySelectorAll('[data-delete-id]');
+    assertEqual(
+      'Transaction count unchanged after delete save failure (rollback)',
+      listAfter.length, 2
+    ); // Req 2.5
+
+    // Error toast should be visible
+    const toast = document.getElementById('error-toast');
+    assert('Error toast element created after delete failure', toast !== null);
+    assert(
+      'Error toast is visible after delete failure',
+      toast && toast.style.display !== 'none' && toast.style.display !== ''
+    );
+
+    restoreLS();
+  })();
+
+  // -------------------------------------------------------
+  // GROUP 5: Chart.js CDN failure  (Req 4.5, 7.5)
+  // -------------------------------------------------------
+  group('5. Chart.js CDN failure — #chart-fallback visible, other features unaffected');
+
+  (function testChartCDNFailure() {
+    const restoreLS = mockLocalStorage();
+
+    // Simulate Chart.js CDN failure by removing window.Chart
+    const savedChart = window.Chart;
+    window.Chart = undefined;
+
+    resetAppState(null);
+    initApp();
+
+    const fallback = document.getElementById('chart-fallback');
+    assert(
+      '#chart-fallback is visible when window.Chart is undefined',
+      fallback.style.display === 'block'
+    ); // Req 7.5 / 4.5
+
+    // Non-chart features still work: balance and list are rendered
+    assertEqual(
+      'Balance still shows "0.00" when Chart.js is absent',
+      document.getElementById('balance-value').textContent,
+      '0.00'
+    );
+
+    const listEl = document.getElementById('transaction-list');
+    assert(
+      'Transaction list is rendered without Chart.js',
+      listEl !== null
+    );
+
+    // Restore
+    window.Chart = savedChart;
+    restoreLS();
+  })();
+
+  // -------------------------------------------------------
+  // GROUP 5b: Chart.js CDN failure with data  (Req 4.5, 7.5)
+  // -------------------------------------------------------
+  group('5b. Chart.js CDN failure with transactions — non-chart UI still correct');
+
+  (function testChartCDNFailureWithData() {
+    const restoreLS = mockLocalStorage();
+
+    const savedChart = window.Chart;
+    window.Chart = undefined;
+
+    const txs = [
+      { id: 'x1', name: 'Pizza', amount: 20.00, category: 'Food', createdAt: Date.now() }
+    ];
+    resetAppState(txs);
+    initApp();
+
+    const fallback = document.getElementById('chart-fallback');
+    assert(
+      '#chart-fallback is visible when Chart.js absent and there IS data',
+      fallback.style.display === 'block'
+    );
+
+    // Balance should still reflect the loaded transaction
+    assertEqual(
+      'Balance correctly shows "20.00" with transaction even without Chart.js',
+      document.getElementById('balance-value').textContent,
+      '20.00'
+    );
+
+    const txItems = document.getElementById('transaction-list')
+                             .querySelectorAll('[data-delete-id]');
+    assertEqual('Transaction appears in list without Chart.js', txItems.length, 1);
+
+    window.Chart = savedChart;
+    restoreLS();
+  })();
+
+  // -------------------------------------------------------
+  // GROUP 6: Category colors  (Req 4.5)
+  // -------------------------------------------------------
+  group('6. Category colors — Food #4CAF50, Transport #2196F3, Fun #FF5722');
+
+  (function testCategoryColors() {
+    // CATEGORY_COLORS is a module-level const in app.js — accessible as a global
+    assert(
+      'CATEGORY_COLORS is defined',
+      typeof CATEGORY_COLORS === 'object' && CATEGORY_COLORS !== null
+    );
+
+    assertEqual('Food color is #4CAF50',      CATEGORY_COLORS['Food'],      '#4CAF50'); // Req 4.5
+    assertEqual('Transport color is #2196F3',  CATEGORY_COLORS['Transport'], '#2196F3');
+    assertEqual('Fun color is #FF5722',        CATEGORY_COLORS['Fun'],       '#FF5722');
+
+    // Also verify via renderChart — the Chart instance should receive the right colors
+    const restoreLS = mockLocalStorage();
+    const instances = makeChartStub();
+
+    const txs = [
+      { id: 'col-f', name: 'Salad',  amount: 10, category: 'Food',      createdAt: Date.now() },
+      { id: 'col-t', name: 'Metro',  amount: 5,  category: 'Transport', createdAt: Date.now() },
+      { id: 'col-u', name: 'Movie',  amount: 15, category: 'Fun',       createdAt: Date.now() }
+    ];
+    resetAppState(txs);
+    initApp();
+
+    // The last Chart instance created is the current one
+    const inst = instances[instances.length - 1];
+    assert('Chart instance was created', inst !== undefined);
+
+    if (inst) {
+      const colors = inst.config.data.datasets[0].backgroundColor;
+      // Order follows categories array in computeCategoryData: Food, Transport, Fun
+      assert(
+        'Chart backgroundColor array contains #4CAF50 (Food)',
+        colors.includes('#4CAF50')
+      );
+      assert(
+        'Chart backgroundColor array contains #2196F3 (Transport)',
+        colors.includes('#2196F3')
+      );
+      assert(
+        'Chart backgroundColor array contains #FF5722 (Fun)',
+        colors.includes('#FF5722')
+      );
+    }
+
+    restoreLS();
+  })();
+
+  // -------------------------------------------------------
+  // Render results
+  // -------------------------------------------------------
+  renderResults();
+});
+</script>
+
+</body>
+</html>

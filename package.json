@@ -1,0 +1,24 @@
+
+ { "name": "codingcamp-21sept26-kafinurhikmah",
+  "version": "1.0.0",
+  "description": "Expense & Budget Visualizer",
+  "main": "index.js",
+  "directories": 
+  {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "open tests/validation.test.html"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kafinurhikmah-sketch/CodingCamp-21Sept26-KafiNurHikmah.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kafinurhikmah-sketch/CodingCamp-21Sept26-KafiNurHikmah/issues"
+  },
+  "homepage": "https://github.com/kafinurhikmah-sketch/CodingCamp-21Sept26-KafiNurHikmah#readme"
+}

@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<!--
+  Integration Tests: Expense & Budget Visualizer
+  ================================================
+  Tests Requirements: 5.1, 5.2, 5.3, 5.4
+
+  Scenarios:
+    1. Full add-delete cycle
+       - Add 3 transactions across Food / Transport / Fun
+       - Verify balance and chart percentages
+       - Delete one; verify list, balance, and chart all update
+    2. Page reload persistence
+       - Seed localStorage, re-initialize app, verify all transactions restored
+    3. Storage parse error recovery
+       - Set localStorage to invalid JSON, re-initialize, verify empty state + warning
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Integration Tests — Expense & Budget Visualizer</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #eee; padding: 1rem 2rem; }
+    h1   { color: #fff; }
+    h2   { color: #aaa; margin-top: 2rem; border-bottom: 1px solid #333; }
+    .pass  { color: #4CAF50; }
+    .fail  { color: #f44336; }
+    .skip  { color: #9E9E9E; }
+    pre    { background: #1e1e1e; padding: .5rem; border-radius: 4px; overflow-x: auto; }
+    #summary { font-size: 1.2rem; margin-top: 2rem; padding: 1rem;
+               border-radius: 4px; background: #1e1e1e; }
+    #app-mount { display: none; } /* hidden app DOM used by tests */
+  </style>
+</head>
+<body>
+
+<h1>Integration Tests</h1>
+<p id="summary">Running…</p>
+
+<!-- =========================================================
+     Hidden app DOM mount — mirrors index.html structure so
+     app.js getElementById calls resolve correctly.
+     ========================================================= -->
+<div id="app-mount">
+  <div id="storage-warning" style="display:none;" role="alert" aria-live="polite">
+    <span>⚠️ Local storage is unavailable.</span>
+    <button type="button" id="storage-warning-close" aria-label="Dismiss warning">✕</button>
+  </div>
+
+  <section id="form-section">
+    <form id="expense-form" novalidate>
+      <div class="field-group">
+        <label for="input-name">Item Name</label>
+        <input type="text" id="input-name" name="name" maxlength="100" />
+        <span class="field-error" id="error-name" aria-live="polite"></span>
+      </div>
+      <div class="field-group">
+        <label for="input-amount">Amount</label>
+        <input type="number" id="input-amount" name="amount" min="0.01" max="999999999.99" step="0.01" />
+        <span class="field-error" id="error-amount" aria-live="polite"></span>
+      </div>
+      <div class="field-group">
+        <label for="input-category">Category</label>
+        <select id="input-category" name="category">
+          <option value="">-- Select Category --</option>
+          <option value="Food">Food</option>
+          <option value="Transport">Transport</option>
+          <option value="Fun">Fun</option>
+        </select>
+        <span class="field-error" id="error-category" aria-live="polite"></span>
+      </div>
+      <button type="submit">Add Expense</button>
+    </form>
+  </section>
+
+  <section id="balance-section">
+    <p id="balance-value">0.00</p>
+  </section>
+
+  <section id="list-section">
+    <ul id="transaction-list" aria-label="Transaction list">
+      <li id="empty-state-message">No expenses recorded yet.</li>
+    </ul>
+  </section>
+
+  <section id="chart-section">
+    <div id="chart-container">
+      <div id="chart-fallback" style="display:none;">Chart could not be loaded.</div>
+      <p id="chart-no-data">No data to display.</p>
+      <canvas id="expense-chart" aria-label="Spending pie chart" role="img"></canvas>
+    </div>
+  </section>
+</div><!-- /#app-mount -->
+
+<!-- =========================================================
+     Chart.js stub — prevents CDN network call and makes
+     window.Chart available as a spy-able constructor.
+     ========================================================= -->
+<script>
+(function () {
+  'use strict';
+
+  // Minimal Chart.js stub -----------------------------------------------
+  window._chartInstances = [];
+  window.Chart = function ChartStub(ctx, config) {
+    this.ctx    = ctx;
+    this.config = JSON.parse(JSON.stringify(config)); // snapshot at creation
+    this.type           = config.type;
+    this.data           = config.data;
+    this.destroyed      = false;
+    this.destroy = function () { this.destroyed = true; };
+    window._chartInstances.push(this);
+  };
+
+  // =====================================================================
+  // Minimal in-memory localStorage stub
+  // Replaced before each test group that needs clean storage.
+  // =====================================================================
+  function makeLocalStorageStub() {
+    const store = {};
+    return {
+      _store: store,
+      getItem:    function (k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem:    function (k, v) { store[k] = String(v); },
+      removeItem: function (k) { delete store[k]; },
+      clear:      function () { Object.keys(store).forEach(function (k) { delete store[k]; }); },
+      get length() { return Object.keys(store).length; },
+      key:        function (i) { return Object.keys(store)[i] || null; }
+    };
+  }
+
+  window._makeLocalStorageStub = makeLocalStorageStub;
+})();
+</script>
+
+<!-- =========================================================
+     Load app.js AFTER the stubs so the DOMContentLoaded
+     handler fires into a ready DOM.
+     ========================================================= -->
+<script src="../js/app.js"></script>
+
+<!-- =========================================================
+     Test harness + test suites
+     ========================================================= -->
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------
+   * Tiny test harness
+   * ------------------------------------------------------------------ */
+  const results = [];
+
+  function assert(description, condition, detail) {
+    results.push({ description, ok: !!condition, detail: detail || '' });
+  }
+
+  function assertEqual(description, actual, expected) {
+    const ok = actual === expected;
+    results.push({
+      description,
+      ok,
+      detail: ok ? '' : ('expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual))
+    });
+  }
+
+  function assertApprox(description, actual, expected, tolerance) {
+    tolerance = tolerance || 0.01;
+    const ok = Math.abs(actual - expected) <= tolerance;
+    results.push({
+      description,
+      ok,
+      detail: ok ? '' : ('expected ≈' + expected + ' (±' + tolerance + '), got ' + actual)
+    });
+  }
+
+  /* ------------------------------------------------------------------
+   * Helpers
+   * ------------------------------------------------------------------ */
+  const STORAGE_KEY = 'expense_visualizer_transactions';
+
+  /**
+   * Replace the module-level `storageAvailable` flag and the `transactions`
+   * array, then re-run app initialisation with a fresh localStorage stub.
+   *
+   * Because app.js attaches module-scoped variables we cannot reach directly,
+   * we drive the app through its public API:
+   *   - Set localStorage state before calling initApp()
+   *   - Inspect the DOM after
+   *
+   * We do need to reset the app's internal `transactions` array and
+   * `storageAvailable` flag between test groups.  We expose a tiny helper
+   * that re-runs initApp() which is the designed entry point.
+   */
+  function resetApp(stubStorage) {
+    // Wire the stub so app.js reads from it
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable:     true,
+      value:        stubStorage
+    });
+
+    // Reset visible DOM state that persists across test groups
+    document.getElementById('balance-value').textContent = '0.00';
+    document.getElementById('transaction-list').innerHTML =
+      '<li id="empty-state-message">No expenses recorded yet.</li>';
+    document.getElementById('storage-warning').style.display = 'none';
+    document.getElementById('chart-no-data').style.display   = 'block';
+    document.getElementById('expense-chart').style.display   = 'none';
+    document.getElementById('chart-fallback').style.display  = 'none';
+    document.getElementById('input-name').value              = '';
+    document.getElementById('input-amount').value            = '';
+    document.getElementById('input-category').selectedIndex  = 0;
+
+    // Reset chart instances log
+    window._chartInstances = [];
+
+    // Reset app.js module-level globals so each scenario starts clean.
+    // storageAvailable must be true so loadTransactions() actually attempts
+    // the read on the next initApp() call.
+    /* global storageAvailable, transactions */
+    storageAvailable = true;
+    transactions = [];
+
+    // Re-init app (reads from the new stub localStorage)
+    initApp();
+  }
+
+  /**
+   * Programmatically fill the form and fire the submit event.
+   */
+  function submitForm(name, amount, category) {
+    document.getElementById('input-name').value = name;
+    document.getElementById('input-amount').value = String(amount);
+    // Select the correct <option>
+    const sel = document.getElementById('input-category');
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === category) { sel.selectedIndex = i; break; }
+    }
+    // Fire submit
+    const form = document.getElementById('expense-form');
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  }
+
+  /**
+   * Click the delete button for a given list item index (0-based).
+   */
+  function deleteByIndex(index) {
+    const btns = document.querySelectorAll('#transaction-list [data-delete-id]');
+    if (btns[index]) {
+      btns[index].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * SCENARIO 1 — Full add-delete cycle
+   * Requirements: 5.1, 5.2
+   * ------------------------------------------------------------------ */
+  (function scenarioFullCycle() {
+    const stub = window._makeLocalStorageStub();
+    resetApp(stub);
+
+    // Add 3 transactions: Food $50, Transport $30, Fun $20 → total $100
+    submitForm('Lunch',      50,  'Food');
+    submitForm('Bus ticket', 30,  'Transport');
+    submitForm('Movie',      20,  'Fun');
+
+    // ── After 3 adds ──────────────────────────────────────────────────
+
+    // 1a. Balance correct
+    assertEqual(
+      '[Add cycle] Balance after 3 adds is "100.00"',
+      document.getElementById('balance-value').textContent,
+      '100.00'
+    );
+
+    // 1b. All 3 rows in the list
+    const rows = document.querySelectorAll('#transaction-list [data-delete-id]');
+    assertEqual(
+      '[Add cycle] 3 transaction rows rendered',
+      rows.length, 3
+    );
+
+    // 1c. Each amount formatted to 2 dp
+    const amounts = Array.from(
+      document.querySelectorAll('#transaction-list .tx-amount')
+    ).map(function (el) { return el.textContent; });
+    assertEqual('[Add cycle] Food amount formatted', amounts[0], '50.00');
+    assertEqual('[Add cycle] Transport amount formatted', amounts[1], '30.00');
+    assertEqual('[Add cycle] Fun amount formatted', amounts[2], '20.00');
+
+    // 1d. Empty-state message gone
+    assert(
+      '[Add cycle] Empty-state message is absent',
+      !document.getElementById('empty-state-message')
+    );
+
+    // 1e. Chart rendered (canvas visible, no-data hidden)
+    assert(
+      '[Add cycle] Chart canvas is visible',
+      document.getElementById('expense-chart').style.display !== 'none'
+    );
+    assert(
+      '[Add cycle] Chart no-data message is hidden',
+      document.getElementById('chart-no-data').style.display === 'none'
+    );
+
+    // 1f. Chart percentages — Food 50%, Transport 30%, Fun 20%
+    const lastChart = window._chartInstances[window._chartInstances.length - 1];
+    assert('[Add cycle] A Chart instance was created', !!lastChart);
+    if (lastChart) {
+      const labels      = lastChart.data.labels;
+      const datasets    = lastChart.data.datasets[0];
+      const rawTotals   = datasets.data;          // raw sums passed to Chart
+      const grandTotal  = rawTotals.reduce(function (s, v) { return s + v; }, 0);
+
+      // Labels include the category names
+      assert('[Add cycle] Chart labels include Food',
+        labels.some(function (l) { return l.indexOf('Food') !== -1; }));
+      assert('[Add cycle] Chart labels include Transport',
+        labels.some(function (l) { return l.indexOf('Transport') !== -1; }));
+      assert('[Add cycle] Chart labels include Fun',
+        labels.some(function (l) { return l.indexOf('Fun') !== -1; }));
+
+      // Derive percentages from raw totals stored in the chart data
+      const foodIndex  = labels.findIndex(function (l) { return l.indexOf('Food') !== -1; });
+      const tranIndex  = labels.findIndex(function (l) { return l.indexOf('Transport') !== -1; });
+      const funIndex   = labels.findIndex(function (l) { return l.indexOf('Fun') !== -1; });
+
+      assertApprox('[Add cycle] Food percentage ≈ 50%',
+        (rawTotals[foodIndex] / grandTotal) * 100, 50, 0.01);
+      assertApprox('[Add cycle] Transport percentage ≈ 30%',
+        (rawTotals[tranIndex] / grandTotal) * 100, 30, 0.01);
+      assertApprox('[Add cycle] Fun percentage ≈ 20%',
+        (rawTotals[funIndex] / grandTotal) * 100, 20, 0.01);
+    }
+
+    // 1g. Transactions persisted in localStorage
+    const stored = JSON.parse(stub.getItem(STORAGE_KEY));
+    assertEqual('[Add cycle] 3 transactions saved to localStorage', stored.length, 3);
+
+    // ── Delete the Transport transaction (index 1) ─────────────────────
+    deleteByIndex(1);
+
+    // 1h. List now has 2 rows
+    const rowsAfter = document.querySelectorAll('#transaction-list [data-delete-id]');
+    assertEqual('[Delete] 2 rows remain after delete', rowsAfter.length, 2);
+
+    // 1i. Deleted item not in list
+    const namesAfter = Array.from(
+      document.querySelectorAll('#transaction-list .tx-name')
+    ).map(function (el) { return el.textContent; });
+    assert('[Delete] "Bus ticket" is removed from list',
+      !namesAfter.includes('Bus ticket'));
+
+    // 1j. Balance updated to $70 (50 + 20)
+    assertEqual(
+      '[Delete] Balance after delete is "70.00"',
+      document.getElementById('balance-value').textContent,
+      '70.00'
+    );
+
+    // 1k. localStorage updated to 2 entries
+    const storedAfter = JSON.parse(stub.getItem(STORAGE_KEY));
+    assertEqual('[Delete] localStorage reduced to 2 entries', storedAfter.length, 2);
+
+    // 1l. Chart re-rendered without Transport (only 2 categories remain)
+    const chartAfterDelete = window._chartInstances[window._chartInstances.length - 1];
+    assert('[Delete] Chart instance updated after delete', !!chartAfterDelete);
+    if (chartAfterDelete) {
+      const labels = chartAfterDelete.data.labels;
+      assert('[Delete] Chart no longer includes Transport slice',
+        !labels.some(function (l) { return l.indexOf('Transport') !== -1; }));
+      assert('[Delete] Chart still includes Food slice',
+        labels.some(function (l) { return l.indexOf('Food') !== -1; }));
+      assert('[Delete] Chart still includes Fun slice',
+        labels.some(function (l) { return l.indexOf('Fun') !== -1; }));
+
+      // Food is 50/(50+20)≈71.43%, Fun is 20/70≈28.57%
+      const rawAfter = chartAfterDelete.data.datasets[0].data;
+      const gtAfter  = rawAfter.reduce(function (s, v) { return s + v; }, 0);
+      const fIdx     = labels.findIndex(function (l) { return l.indexOf('Food') !== -1; });
+      const uIdx     = labels.findIndex(function (l) { return l.indexOf('Fun') !== -1; });
+
+      assertApprox('[Delete] Food percentage ≈ 71.43% after delete',
+        (rawAfter[fIdx] / gtAfter) * 100, 71.43, 0.02);
+      assertApprox('[Delete] Fun percentage ≈ 28.57% after delete',
+        (rawAfter[uIdx] / gtAfter) * 100, 28.57, 0.02);
+    }
+  }());
+
+  /* ------------------------------------------------------------------
+   * SCENARIO 2 — Page reload persistence
+   * Requirements: 5.3
+   * ------------------------------------------------------------------ */
+  (function scenarioReloadPersistence() {
+    // Seed localStorage with 2 known transactions
+    const stub = window._makeLocalStorageStub();
+    const seeded = [
+      { id: 'aaa111', name: 'Pizza',  amount: 15.00, category: 'Food',      createdAt: 1700000001000 },
+      { id: 'bbb222', name: 'Taxi',   amount: 22.50, category: 'Transport', createdAt: 1700000002000 }
+    ];
+    stub.setItem(STORAGE_KEY, JSON.stringify(seeded));
+
+    // "Reload" = re-initialize app with the same storage
+    resetApp(stub);
+
+    // 2a. Correct number of rows restored
+    const rows = document.querySelectorAll('#transaction-list [data-delete-id]');
+    assertEqual(
+      '[Reload] 2 transactions restored after reload',
+      rows.length, 2
+    );
+
+    // 2b. Item names match seeded data (in insertion order)
+    const names = Array.from(
+      document.querySelectorAll('#transaction-list .tx-name')
+    ).map(function (el) { return el.textContent; });
+    assertEqual('[Reload] First restored transaction is "Pizza"',  names[0], 'Pizza');
+    assertEqual('[Reload] Second restored transaction is "Taxi"',  names[1], 'Taxi');
+
+    // 2c. Amounts formatted to 2 dp
+    const amounts = Array.from(
+      document.querySelectorAll('#transaction-list .tx-amount')
+    ).map(function (el) { return el.textContent; });
+    assertEqual('[Reload] Pizza amount "15.00"', amounts[0], '15.00');
+    assertEqual('[Reload] Taxi amount "22.50"',  amounts[1], '22.50');
+
+    // 2d. Balance = 15 + 22.50 = 37.50
+    assertEqual(
+      '[Reload] Balance "37.50" after reload',
+      document.getElementById('balance-value').textContent,
+      '37.50'
+    );
+
+    // 2e. Chart rendered (canvas visible)
+    assert(
+      '[Reload] Chart canvas is visible after reload',
+      document.getElementById('expense-chart').style.display !== 'none'
+    );
+
+    // 2f. No storage warning banner shown
+    assert(
+      '[Reload] Storage warning is NOT shown for valid data',
+      document.getElementById('storage-warning').style.display === 'none'
+    );
+  }());
+
+  /* ------------------------------------------------------------------
+   * SCENARIO 3 — Storage parse error recovery
+   * Requirements: 5.4
+   * ------------------------------------------------------------------ */
+  (function scenarioStorageParseError() {
+    const stub = window._makeLocalStorageStub();
+    // Corrupt the data
+    stub.setItem(STORAGE_KEY, 'THIS IS NOT VALID JSON }{[');
+
+    // "Reload" with corrupt storage
+    resetApp(stub);
+
+    // 3a. List shows empty-state message
+    assert(
+      '[Parse error] Empty-state message is shown',
+      !!document.getElementById('empty-state-message')
+    );
+
+    // 3b. No transaction rows rendered
+    const rows = document.querySelectorAll('#transaction-list [data-delete-id]');
+    assertEqual('[Parse error] No transaction rows rendered', rows.length, 0);
+
+    // 3c. Balance shows "0.00"
+    assertEqual(
+      '[Parse error] Balance is "0.00" on parse error',
+      document.getElementById('balance-value').textContent,
+      '0.00'
+    );
+
+    // 3d. Storage warning banner is visible (Requirement 5.4)
+    assert(
+      '[Parse error] Storage warning banner is shown',
+      document.getElementById('storage-warning').style.display !== 'none'
+    );
+
+    // 3e. Chart no-data message shown, canvas hidden
+    assert(
+      '[Parse error] Chart no-data text visible',
+      document.getElementById('chart-no-data').style.display !== 'none'
+    );
+    assert(
+      '[Parse error] Chart canvas hidden on empty state',
+      document.getElementById('expense-chart').style.display === 'none'
+    );
+  }());
+
+  /* ------------------------------------------------------------------
+   * Render results to page
+   * ------------------------------------------------------------------ */
+  const passed = results.filter(function (r) { return r.ok; }).length;
+  const failed = results.filter(function (r) { return !r.ok; }).length;
+  const total  = results.length;
+
+  // Summary banner
+  const summaryEl = document.getElementById('summary');
+  if (failed === 0) {
+    summaryEl.style.background = '#1b3a1b';
+    summaryEl.innerHTML = '✅ All ' + total + ' assertions passed.';
+  } else {
+    summaryEl.style.background = '#3a1b1b';
+    summaryEl.innerHTML = '❌ ' + failed + ' of ' + total + ' assertions failed.';
+  }
+
+  // Group by scenario header
+  const sections = [
+    { title: 'Scenario 1 — Full Add-Delete Cycle (Requirements 5.1, 5.2)', prefix: '[Add cycle]' },
+    { title: 'Scenario 1 (continued) — Delete',                            prefix: '[Delete]'    },
+    { title: 'Scenario 2 — Page Reload Persistence (Requirement 5.3)',     prefix: '[Reload]'    },
+    { title: 'Scenario 3 — Storage Parse Error Recovery (Req. 5.4)',       prefix: '[Parse error]' }
+  ];
+
+  sections.forEach(function (sec) {
+    const matching = results.filter(function (r) {
+      return r.description.startsWith(sec.prefix);
+    });
+    if (matching.length === 0) return;
+
+    const h2 = document.createElement('h2');
+    h2.textContent = sec.title;
+    document.body.appendChild(h2);
+
+    matching.forEach(function (r) {
+      const p = document.createElement('p');
+      p.className = r.ok ? 'pass' : 'fail';
+      p.textContent = (r.ok ? '✓ ' : '✗ ') + r.description;
+      document.body.appendChild(p);
+
+      if (!r.ok && r.detail) {
+        const pre = document.createElement('pre');
+        pre.textContent = '  ' + r.detail;
+        document.body.appendChild(pre);
+      }
+    });
+  });
+
+  // Console summary for programmatic reading
+  console.log('Integration test results: ' + passed + '/' + total + ' passed');
+  results.forEach(function (r) {
+    if (r.ok) {
+      console.log('  ✓', r.description);
+    } else {
+      console.error('  ✗', r.description, r.detail ? ('— ' + r.detail) : '');
+    }
+  });
+
+}());
+</script>
+
+</body>
+</html>

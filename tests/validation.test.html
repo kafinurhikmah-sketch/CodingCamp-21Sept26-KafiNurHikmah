@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<!--
+  Task 11.1 — Unit Tests: Form Validation Cases
+  Requirements: 1.3, 1.4, 1.5, 1.6
+
+  Self-contained test runner. Open this file in a browser (via Laragon or
+  file://) to execute all tests. No build step required.
+
+  Coverage:
+    Section A — validateInput() pure function (all rule combinations)
+    Section B — Form submit integration: valid submission flow
+    Section C — Form submit integration: invalid submissions leave state unchanged
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test: Form Validation — Expense &amp; Budget Visualizer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: monospace; font-size: 14px; line-height: 1.5; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 16px; }
+    h1 { font-size: 18px; color: #9cdcfe; margin-bottom: 8px; }
+    h2 { font-size: 15px; color: #569cd6; margin: 20px 0 6px; }
+    #summary { font-size: 15px; font-weight: bold; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+    #summary.pass { background: #1e3a1e; color: #4ec94e; border: 1px solid #4ec94e; }
+    #summary.fail { background: #3a1e1e; color: #f14c4c; border: 1px solid #f14c4c; }
+    .suite { margin-bottom: 12px; }
+    .test { padding: 3px 0 3px 16px; }
+    .test.pass::before { content: "✓ "; color: #4ec94e; }
+    .test.fail::before { content: "✗ "; color: #f14c4c; }
+    .test.fail { color: #f14c4c; }
+    .error-msg { font-size: 12px; color: #ce9178; padding-left: 28px; }
+    /* Hidden app fixture */
+    #app-fixture { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  </style>
+</head>
+<body>
+
+<h1>Test Suite: Form Validation Cases (Task 11.1)</h1>
+<div id="summary">Running…</div>
+<div id="results"></div>
+
+<!--
+  Minimal app DOM fixture — app.js wires event listeners to these elements.
+  Hidden off-screen so it doesn't affect visual layout.
+-->
+<div id="app-fixture">
+  <div id="storage-warning" style="display:none;">
+    <span>warning</span>
+    <button id="storage-warning-close">✕</button>
+  </div>
+  <form id="expense-form" novalidate>
+    <input type="text"   id="input-name"     maxlength="100" />
+    <input type="number" id="input-amount" />
+    <select id="input-category">
+      <option value="">-- Select Category --</option>
+      <option value="Food">Food</option>
+      <option value="Transport">Transport</option>
+      <option value="Fun">Fun</option>
+    </select>
+    <span class="field-error" id="error-name"></span>
+    <span class="field-error" id="error-amount"></span>
+    <span class="field-error" id="error-category"></span>
+    <button type="submit">Add Expense</button>
+  </form>
+  <p id="balance-value">0.00</p>
+  <ul id="transaction-list">
+    <li id="empty-state-message">No expenses recorded yet.</li>
+  </ul>
+  <div id="chart-fallback"  style="display:none;"></div>
+  <p   id="chart-no-data">No data to display.</p>
+  <canvas id="expense-chart"></canvas>
+</div>
+
+<script>
+// =============================================================================
+// Minimal test harness
+// =============================================================================
+const results = [];
+let currentSuite = '';
+
+function suite(name, fn) {
+  currentSuite = name;
+  fn();
+}
+
+function test(name, fn) {
+  try {
+    fn();
+    results.push({ suite: currentSuite, name, ok: true });
+  } catch (e) {
+    results.push({ suite: currentSuite, name, ok: false, error: e.message });
+  }
+}
+
+function expect(actual) {
+  return {
+    toBe(expected) {
+      if (actual !== expected) {
+        throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+      }
+    },
+    toEqual(expected) {
+      const a = JSON.stringify(actual), b = JSON.stringify(expected);
+      if (a !== b) throw new Error(`Expected ${b}, got ${a}`);
+    },
+    toBeTruthy() {
+      if (!actual) throw new Error(`Expected truthy value, got ${JSON.stringify(actual)}`);
+    },
+    toBeFalsy() {
+      if (actual) throw new Error(`Expected falsy value, got ${JSON.stringify(actual)}`);
+    },
+    toBeUndefined() {
+      if (actual !== undefined) throw new Error(`Expected undefined, got ${JSON.stringify(actual)}`);
+    },
+    toMatch(pattern) {
+      if (typeof pattern === 'string') {
+        if (!String(actual).includes(pattern)) {
+          throw new Error(`Expected "${actual}" to contain "${pattern}"`);
+        }
+      } else {
+        if (!pattern.test(String(actual))) {
+          throw new Error(`Expected "${actual}" to match ${pattern}`);
+        }
+      }
+    },
+    toBeLessThan(n) {
+      if (actual >= n) throw new Error(`Expected ${actual} < ${n}`);
+    },
+    toHaveLength(n) {
+      if (!actual || actual.length !== n) {
+        throw new Error(`Expected length ${n}, got ${actual ? actual.length : 'N/A'}`);
+      }
+    },
+    toContain(str) {
+      if (!String(actual).includes(str)) {
+        throw new Error(`Expected "${actual}" to contain "${str}"`);
+      }
+    },
+  };
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/** Reset the fixture DOM to its initial state before each test. */
+function resetFixture() {
+  // Re-set form fields
+  document.getElementById('input-name').value     = '';
+  document.getElementById('input-amount').value   = '';
+  document.getElementById('input-category').selectedIndex = 0;
+
+  // Clear error spans
+  ['error-name', 'error-amount', 'error-category'].forEach(id => {
+    document.getElementById(id).textContent = '';
+  });
+
+  // Reset balance
+  document.getElementById('balance-value').textContent = '0.00';
+
+  // Reset transaction list to empty state
+  const list = document.getElementById('transaction-list');
+  list.innerHTML = '<li id="empty-state-message">No expenses recorded yet.</li>';
+
+  // Clear localStorage
+  try { localStorage.removeItem('expense_visualizer_transactions'); } catch(e) {}
+
+  // Reset app.js module-level globals so each test starts with a clean slate.
+  // storageAvailable must be reset to true so loadTransactions() re-attempts
+  // the read and doesn't silently skip saves.
+  /* global storageAvailable, transactions */
+  if (typeof storageAvailable !== 'undefined') storageAvailable = true;
+  if (typeof transactions    !== 'undefined') transactions    = [];
+
+  // Reset the app's in-memory state by re-running initApp
+  // (app.js exposes initApp as a global function)
+  if (typeof initApp === 'function') {
+    initApp();
+  }
+}
+
+/** Fill form fields and fire the submit event. */
+function submitForm(name, amount, category) {
+  document.getElementById('input-name').value   = name;
+  document.getElementById('input-amount').value = amount;
+  document.getElementById('input-category').value = category;
+  const form = document.getElementById('expense-form');
+  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+}
+
+/** Count real transaction rows (excludes empty-state li). */
+function countTransactions() {
+  return document.getElementById('empty-state-message')
+    ? 0
+    : document.querySelectorAll('#transaction-list li').length;
+}
+</script>
+
+<!-- Load app.js — its DOMContentLoaded handler fires after this page is parsed -->
+<script src="../js/app.js"></script>
+
+<script>
+// app.js has now run (DOMContentLoaded fires synchronously in inline scripts
+// after the page finishes parsing; but to be safe we use window.onload).
+window.addEventListener('load', function runTests() {
+
+  // ===========================================================================
+  // SECTION A: validateInput() — pure function unit tests
+  // ===========================================================================
+
+  suite('validateInput — valid inputs', () => {
+
+    test('returns valid:true for a fully valid submission (Food)', () => {
+      const r = validateInput('Lunch', '12.50', 'Food');
+      expect(r.valid).toBe(true);
+      expect(Object.keys(r.errors)).toHaveLength(0);
+    });
+
+    test('returns valid:true for category Transport', () => {
+      expect(validateInput('Bus', '5.00', 'Transport').valid).toBe(true);
+    });
+
+    test('returns valid:true for category Fun', () => {
+      expect(validateInput('Movie', '20.00', 'Fun').valid).toBe(true);
+    });
+
+    test('returns valid:true for amount at minimum boundary (0.01)', () => {
+      expect(validateInput('Item', '0.01', 'Food').valid).toBe(true);
+    });
+
+    test('returns valid:true for amount at maximum boundary (999999999.99)', () => {
+      expect(validateInput('Item', '999999999.99', 'Food').valid).toBe(true);
+    });
+
+    test('returns valid:true for name exactly 100 characters long', () => {
+      expect(validateInput('a'.repeat(100), '1.00', 'Food').valid).toBe(true);
+    });
+
+    test('returns valid:true when name has leading/trailing spaces but non-empty content', () => {
+      expect(validateInput('  Coffee  ', '3.00', 'Food').valid).toBe(true);
+    });
+
+  });
+
+  suite('validateInput — invalid name', () => {
+
+    test('empty name → valid:false with name error only', () => {
+      const r = validateInput('', '10.00', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.name).toBeTruthy();
+      expect(r.errors.amount).toBeUndefined();
+      expect(r.errors.category).toBeUndefined();
+    });
+
+    test('whitespace-only name (spaces) → valid:false with name error', () => {
+      const r = validateInput('   ', '10.00', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.name).toBeTruthy();
+    });
+
+    test('whitespace-only name (tab + newline) → valid:false with name error', () => {
+      const r = validateInput('\t\n  ', '10.00', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.name).toBeTruthy();
+    });
+
+    test('name exceeding 100 characters → valid:false with name error mentioning 100', () => {
+      const r = validateInput('a'.repeat(101), '10.00', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.name).toBeTruthy();
+      expect(r.errors.name).toMatch('100');
+    });
+
+    test('name exactly 101 characters → valid:false', () => {
+      expect(validateInput('x'.repeat(101), '5.00', 'Food').valid).toBe(false);
+    });
+
+  });
+
+  suite('validateInput — invalid amount', () => {
+
+    test('amount = 0 → valid:false with amount error', () => {
+      const r = validateInput('Item', '0', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount = 0.00 → valid:false with amount error', () => {
+      const r = validateInput('Item', '0.00', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount = 0.001 (below min) → valid:false with amount error', () => {
+      const r = validateInput('Item', '0.001', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount negative (-5) → valid:false with amount error', () => {
+      const r = validateInput('Item', '-5', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount = -0.01 → valid:false with amount error', () => {
+      const r = validateInput('Item', '-0.01', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount exceeds maximum (1000000000) → valid:false with amount error', () => {
+      const r = validateInput('Item', '1000000000', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount = 999999999.991 (just over max) → valid:false', () => {
+      const r = validateInput('Item', '999999999.991', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount is non-numeric string → valid:false with amount error', () => {
+      const r = validateInput('Item', 'abc', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount is empty string → valid:false with amount error', () => {
+      const r = validateInput('Item', '', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+    test('amount is Infinity string → valid:false with amount error', () => {
+      const r = validateInput('Item', 'Infinity', 'Food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.amount).toBeTruthy();
+    });
+
+  });
+
+  suite('validateInput — invalid category', () => {
+
+    test('empty category string → valid:false with category error', () => {
+      const r = validateInput('Item', '10.00', '');
+      expect(r.valid).toBe(false);
+      expect(r.errors.category).toBeTruthy();
+    });
+
+    test('category "Groceries" (not in list) → valid:false with category error', () => {
+      const r = validateInput('Item', '10.00', 'Groceries');
+      expect(r.valid).toBe(false);
+      expect(r.errors.category).toBeTruthy();
+    });
+
+    test('lowercase category "food" → valid:false (case-sensitive)', () => {
+      const r = validateInput('Item', '10.00', 'food');
+      expect(r.valid).toBe(false);
+      expect(r.errors.category).toBeTruthy();
+    });
+
+    test('category "FOOD" → valid:false (case-sensitive)', () => {
+      const r = validateInput('Item', '10.00', 'FOOD');
+      expect(r.valid).toBe(false);
+      expect(r.errors.category).toBeTruthy();
+    });
+
+  });
+
+  suite('validateInput — multiple simultaneous errors', () => {
+
+    test('all three fields invalid → valid:false with errors on all three fields', () => {
+      const r = validateInput('', '0', '');
+      expect(r.valid).toBe(false);
+      expect(r.errors.name).toBeTruthy();
+      expect(r.errors.amount).toBeTruthy();
+      expect(r.errors.category).toBeTruthy();
+    });
+
+    test('errors object has no extra keys when only name is wrong', () => {
+      const r = validateInput('', '10.00', 'Food');
+      expect(r.valid).toBe(false);
+      const keys = Object.keys(r.errors);
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).toBe('name');
+    });
+
+    test('errors object has no extra keys when only amount is wrong', () => {
+      const r = validateInput('Item', '0', 'Food');
+      expect(r.valid).toBe(false);
+      const keys = Object.keys(r.errors);
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).toBe('amount');
+    });
+
+    test('errors object has no extra keys when only category is wrong', () => {
+      const r = validateInput('Item', '5.00', '');
+      expect(r.valid).toBe(false);
+      const keys = Object.keys(r.errors);
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).toBe('category');
+    });
+
+  });
+
+  // ===========================================================================
+  // SECTION B: Form submit integration — valid submission
+  // Requirements: 1.2, 1.5 (transaction created, form reset within 500 ms)
+  // ===========================================================================
+
+  suite('Form submit — valid submission integration', () => {
+
+    test('adds a transaction row to the list', () => {
+      resetFixture();
+      submitForm('Coffee', '3.50', 'Food');
+      expect(countTransactions()).toBe(1);
+      const liText = document.querySelector('#transaction-list li').textContent;
+      expect(liText).toContain('Coffee');
+    });
+
+    test('shows the category in the transaction row', () => {
+      resetFixture();
+      submitForm('Coffee', '3.50', 'Food');
+      expect(document.querySelector('#transaction-list li').textContent).toContain('Food');
+    });
+
+    test('shows the amount formatted to 2 decimal places in the row', () => {
+      resetFixture();
+      submitForm('Coffee', '3.5', 'Food');
+      expect(document.querySelector('#transaction-list li').textContent).toContain('3.50');
+    });
+
+    test('updates the balance display immediately', () => {
+      resetFixture();
+      submitForm('Coffee', '3.50', 'Food');
+      expect(document.getElementById('balance-value').textContent).toBe('3.50');
+    });
+
+    test('resets name field to empty after submission (within same call stack)', () => {
+      resetFixture();
+      const start = Date.now();
+      submitForm('Coffee', '3.50', 'Food');
+      expect(Date.now() - start).toBeLessThan(500); // synchronous, always passes
+      expect(document.getElementById('input-name').value).toBe('');
+    });
+
+    test('resets amount field to empty after submission', () => {
+      resetFixture();
+      submitForm('Coffee', '3.50', 'Food');
+      expect(document.getElementById('input-amount').value).toBe('');
+    });
+
+    test('resets category select to default blank option after submission', () => {
+      resetFixture();
+      submitForm('Coffee', '3.50', 'Food');
+      expect(document.getElementById('input-category').value).toBe('');
+    });
+
+    test('clears error messages that were present before a valid re-submission', () => {
+      resetFixture();
+      // Trigger errors
+      submitForm('', '0', '');
+      // Now submit valid
+      submitForm('Tea', '1.00', 'Fun');
+      expect(document.getElementById('error-name').textContent).toBe('');
+      expect(document.getElementById('error-amount').textContent).toBe('');
+      expect(document.getElementById('error-category').textContent).toBe('');
+    });
+
+    test('accumulates balance correctly across multiple valid submissions', () => {
+      resetFixture();
+      submitForm('Coffee', '3.50', 'Food');
+      submitForm('Bus',    '2.00', 'Transport');
+      submitForm('Movie',  '10.00', 'Fun');
+      expect(document.getElementById('balance-value').textContent).toBe('15.50');
+      expect(countTransactions()).toBe(3);
+    });
+
+    test('empty-state message is removed once the first transaction is added', () => {
+      resetFixture();
+      submitForm('Item', '1.00', 'Food');
+      // empty-state-message element should no longer be present
+      const emptyMsg = document.getElementById('empty-state-message');
+      expect(emptyMsg).toBeFalsy();
+    });
+
+  });
+
+  // ===========================================================================
+  // SECTION C: Form submit integration — invalid submissions
+  // Requirements: 1.3, 1.4, 1.6
+  // ===========================================================================
+
+  suite('Form submit — invalid submissions leave state unchanged', () => {
+
+    test('empty name: shows name error, transaction count stays 0', () => {
+      resetFixture();
+      submitForm('', '10.00', 'Food');
+      expect(document.getElementById('error-name').textContent).toBeTruthy();
+      expect(countTransactions()).toBe(0);
+      expect(document.getElementById('balance-value').textContent).toBe('0.00');
+    });
+
+    test('whitespace-only name: shows name error, transaction count stays 0', () => {
+      resetFixture();
+      submitForm('   ', '10.00', 'Food');
+      expect(document.getElementById('error-name').textContent).toBeTruthy();
+      expect(countTransactions()).toBe(0);
+    });
+
+    test('amount = 0: shows amount error, transaction count stays 0', () => {
+      resetFixture();
+      submitForm('Item', '0', 'Food');
+      expect(document.getElementById('error-amount').textContent).toBeTruthy();
+      expect(countTransactions()).toBe(0);
+    });
+
+    test('amount negative: shows amount error, transaction count stays 0', () => {
+      resetFixture();
+      submitForm('Item', '-5', 'Food');
+      expect(document.getElementById('error-amount').textContent).toBeTruthy();
+      expect(countTransactions()).toBe(0);
+    });
+
+    test('amount > max: shows amount error, transaction count stays 0', () => {
+      resetFixture();
+      submitForm('Item', '9999999999', 'Food');
+      expect(document.getElementById('error-amount').textContent).toBeTruthy();
+      expect(countTransactions()).toBe(0);
+    });
+
+    test('no category selected: shows category error, transaction count stays 0', () => {
+      resetFixture();
+      submitForm('Item', '10.00', '');
+      expect(document.getElementById('error-category').textContent).toBeTruthy();
+      expect(countTransactions()).toBe(0);
+    });
+
+    test('name > 100 chars: shows name error, transaction count stays 0', () => {
+      resetFixture();
+      submitForm('a'.repeat(101), '10.00', 'Food');
+      expect(document.getElementById('error-name').textContent).toBeTruthy();
+      expect(countTransactions()).toBe(0);
+    });
+
+    test('all fields invalid simultaneously: shows errors for all three', () => {
+      resetFixture();
+      submitForm('', 'abc', '');
+      expect(document.getElementById('error-name').textContent).toBeTruthy();
+      expect(document.getElementById('error-amount').textContent).toBeTruthy();
+      expect(document.getElementById('error-category').textContent).toBeTruthy();
+      expect(countTransactions()).toBe(0);
+    });
+
+    test('invalid submit after one valid: count stays 1, balance unchanged', () => {
+      resetFixture();
+      submitForm('Coffee', '5.00', 'Food');
+      expect(countTransactions()).toBe(1);
+
+      submitForm('', '0', '');
+      expect(countTransactions()).toBe(1);
+      expect(document.getElementById('balance-value').textContent).toBe('5.00');
+    });
+
+    test('invalid submit does not reset form fields', () => {
+      resetFixture();
+      document.getElementById('input-name').value = 'Draft';
+      document.getElementById('input-amount').value = '0'; // invalid
+      document.getElementById('input-category').value = 'Food';
+      document.getElementById('expense-form').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true })
+      );
+      // Name field should still have the draft value (form not reset on error)
+      expect(document.getElementById('input-name').value).toBe('Draft');
+    });
+
+  });
+
+  // ===========================================================================
+  // Render results
+  // ===========================================================================
+  renderResults();
+});
+
+function renderResults() {
+  const container = document.getElementById('results');
+  const summaryEl = document.getElementById('summary');
+
+  const total  = results.length;
+  const passed = results.filter(r => r.ok).length;
+  const failed = total - passed;
+
+  summaryEl.textContent = `${passed} / ${total} tests passed${failed ? ` — ${failed} FAILED` : ''}`;
+  summaryEl.className   = failed ? 'fail' : 'pass';
+
+  // Group by suite
+  const suites = {};
+  for (const r of results) {
+    if (!suites[r.suite]) suites[r.suite] = [];
+    suites[r.suite].push(r);
+  }
+
+  for (const [suiteName, tests] of Object.entries(suites)) {
+    const suiteEl = document.createElement('div');
+    suiteEl.className = 'suite';
+
+    const h2 = document.createElement('h2');
+    const suitePass = tests.filter(t => t.ok).length;
+    h2.textContent = `${suiteName} (${suitePass}/${tests.length})`;
+    suiteEl.appendChild(h2);
+
+    for (const t of tests) {
+      const div = document.createElement('div');
+      div.className = `test ${t.ok ? 'pass' : 'fail'}`;
+      div.textContent = t.name;
+      suiteEl.appendChild(div);
+
+      if (!t.ok && t.error) {
+        const err = document.createElement('div');
+        err.className = 'error-msg';
+        err.textContent = t.error;
+        suiteEl.appendChild(err);
+      }
+    }
+
+    container.appendChild(suiteEl);
+  }
+}
+</script>
+</body>
+</html>

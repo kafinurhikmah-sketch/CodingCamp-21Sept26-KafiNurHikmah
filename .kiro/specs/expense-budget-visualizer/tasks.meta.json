@@ -1,0 +1,285 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Scaffold project structure and HTML skeleton": [
+      {
+        "executionId": "fd2dbe63-ff16-474d-9f4a-c9c7ef0b61b9",
+        "chatSessionId": "sess_23927eb1-46d9-4ba3-94b1-373c0e844e3c",
+        "timestamp": 1790293643155
+      },
+      {
+        "executionId": "fd2dbe63-ff16-474d-9f4a-c9c7ef0b61b9",
+        "chatSessionId": "sess_23927eb1-46d9-4ba3-94b1-373c0e844e3c",
+        "timestamp": 1790293847553
+      }
+    ],
+    "2.1 Add Input Form fields and submit button to `index.html`": [
+      {
+        "executionId": "d5ef99c3-b066-4d3b-94fa-c0911b34f5ac",
+        "chatSessionId": "sess_d5e2d083-e335-4992-a54b-7c791027a864",
+        "timestamp": 1790293865445
+      },
+      {
+        "executionId": "d5ef99c3-b066-4d3b-94fa-c0911b34f5ac",
+        "chatSessionId": "sess_d5e2d083-e335-4992-a54b-7c791027a864",
+        "timestamp": 1790293881761
+      }
+    ],
+    "3.1 Write `validateInput(name, amount, category)`": [
+      {
+        "executionId": "67db722f-68b3-462a-8ba1-30f8f9658132",
+        "chatSessionId": "sess_dc57f33a-4e5d-4bfb-a052-65405c56dab6",
+        "timestamp": 1790294074579
+      },
+      {
+        "executionId": "67db722f-68b3-462a-8ba1-30f8f9658132",
+        "chatSessionId": "sess_dc57f33a-4e5d-4bfb-a052-65405c56dab6",
+        "timestamp": 1790294157033
+      }
+    ],
+    "3. Implement the Validator pure function in `js/app.js`": [
+      {
+        "executionId": "67db722f-68b3-462a-8ba1-30f8f9658132",
+        "chatSessionId": "sess_dc57f33a-4e5d-4bfb-a052-65405c56dab6",
+        "timestamp": 1790294157362
+      }
+    ],
+    "4. Implement the Transaction Factory and Store in `js/app.js`": [
+      {
+        "executionId": "5a9440fa-f04f-45b0-a98d-9ca285114482",
+        "chatSessionId": "sess_6dc6c7dc-800f-4a9f-8ebe-411cc491ec7f",
+        "timestamp": 1790294224705
+      }
+    ],
+    "4.1 Write `createTransaction(name, amount, category)`": [
+      {
+        "executionId": "5a9440fa-f04f-45b0-a98d-9ca285114482",
+        "chatSessionId": "sess_6dc6c7dc-800f-4a9f-8ebe-411cc491ec7f",
+        "timestamp": 1790294239103
+      },
+      {
+        "executionId": "5a9440fa-f04f-45b0-a98d-9ca285114482",
+        "chatSessionId": "sess_6dc6c7dc-800f-4a9f-8ebe-411cc491ec7f",
+        "timestamp": 1790294291333
+      }
+    ],
+    "5.1 Write `computeBalance(transactions)`": [
+      {
+        "executionId": "1781e10b-0f41-423a-a713-5f56e866c719",
+        "chatSessionId": "sess_61c5aac1-c54c-41cc-af06-56013e9126a8",
+        "timestamp": 1790294448018
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295233008
+      }
+    ],
+    "5.3 Write `computeCategoryData(transactions)`": [
+      {
+        "executionId": "1781e10b-0f41-423a-a713-5f56e866c719",
+        "chatSessionId": "sess_61c5aac1-c54c-41cc-af06-56013e9126a8",
+        "timestamp": 1790294448169
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295240848
+      }
+    ],
+    "10.1 Implement responsive single-column layout": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295179381
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295300558
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295312490
+      }
+    ],
+    "5. Implement Balance Calculator and Chart Data Calculator in `js/app.js`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295241106
+      }
+    ],
+    "7.1 Write `renderTransactionList(transactions)`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295248296
+      }
+    ],
+    "7.3 Write `renderBalance(balanceStr)`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295253917
+      }
+    ],
+    "7.4 Write `renderChart(categoryData)`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295257906
+      }
+    ],
+    "7.5 Write `showFormErrors(errors)`, `clearFormErrors()`, and `resetForm()`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295264375
+      }
+    ],
+    "7.6 Write `showStorageWarning()` and `showChartFallback()`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295273370
+      }
+    ],
+    "7. Implement UI Renderer functions in `js/app.js`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295273589
+      }
+    ],
+    "8.1 Wire the form submit event handler": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295279567
+      }
+    ],
+    "8.2 Wire the delete event handler (event delegation on list container)": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295285501
+      }
+    ],
+    "8.4 Write the `initApp()` startup function and call it on `DOMContentLoaded`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295291808
+      }
+    ],
+    "8. Implement Event Handlers and app initialization in `js/app.js`": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295291994
+      }
+    ],
+    "10.3 Apply typography and spacing rules": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295320373
+      }
+    ],
+    "10. CSS responsive layout and accessibility": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295320556
+      }
+    ],
+    "6. Checkpoint — core pure logic complete": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295343037
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295349087
+      }
+    ],
+    "9. Checkpoint — full logic and rendering wired together": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295343523
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295349285
+      }
+    ],
+    "2. Build the Input Form HTML and CSS": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295368467
+      }
+    ],
+    "11.1 Write unit tests for form validation cases": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295380254
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790296679347
+      }
+    ],
+    "11.2 Write unit tests for empty state, storage load, and error paths": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295398250
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790296679995
+      }
+    ],
+    "11.3 Write integration tests for full add-delete cycle and page reload persistence": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790295409236
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790296680375
+      }
+    ],
+    "11. Write unit tests for integration scenarios": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790296679574
+      }
+    ],
+    "12. Final checkpoint — all tests pass, cross-browser smoke test": [
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790296688335
+      },
+      {
+        "executionId": "cb4f80e1-2bb2-4441-9e9a-5e748dae0744",
+        "chatSessionId": "sess_6d598238-77c4-4939-b968-f74f310a1504",
+        "timestamp": 1790297786354
+      }
+    ]
+  }
+}

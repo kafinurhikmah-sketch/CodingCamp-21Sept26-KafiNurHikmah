@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expense &amp; Budget Visualizer</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- Storage warning banner (dismissible) -->
+  <div id="storage-warning" style="display:none;" role="alert" aria-live="polite">
+    <span>⚠️ Local storage is unavailable. Your data will not be saved between sessions.</span>
+    <button type="button" id="storage-warning-close" aria-label="Dismiss warning">✕</button>
+  </div>
+
+  <div id="app-container">
+
+    <!-- Input Form Section -->
+    <section id="form-section">
+      <h2>Add Expense</h2>
+      <form id="expense-form" novalidate>
+        <div class="field-group">
+          <label for="input-name">Item Name</label>
+          <input
+            type="text"
+            id="input-name"
+            name="name"
+            maxlength="100"
+            placeholder="e.g. Lunch"
+            autocomplete="off"
+          />
+          <span class="field-error" id="error-name" aria-live="polite"></span>
+        </div>
+
+        <div class="field-group">
+          <label for="input-amount">Amount</label>
+          <input
+            type="number"
+            id="input-amount"
+            name="amount"
+            min="0.01"
+            max="999999999.99"
+            step="0.01"
+            placeholder="e.g. 12.50"
+          />
+          <span class="field-error" id="error-amount" aria-live="polite"></span>
+        </div>
+
+        <div class="field-group">
+          <label for="input-category">Category</label>
+          <select id="input-category" name="category">
+            <option value="">-- Select Category --</option>
+            <option value="Food">Food</option>
+            <option value="Transport">Transport</option>
+            <option value="Fun">Fun</option>
+          </select>
+          <span class="field-error" id="error-category" aria-live="polite"></span>
+        </div>
+
+        <button type="submit">Add Expense</button>
+      </form>
+    </section>
+
+    <!-- Balance Display Section -->
+    <section id="balance-section">
+      <h2>Total Balance</h2>
+      <p class="balance-label">Total Spending:</p>
+      <p id="balance-value" class="balance-amount">0.00</p>
+    </section>
+
+    <!-- Transaction List Section -->
+    <section id="list-section">
+      <h2>Transactions</h2>
+      <ul id="transaction-list" aria-label="Transaction list">
+        <li id="empty-state-message">No expenses recorded yet.</li>
+      </ul>
+    </section>
+
+    <!-- Chart Section -->
+    <section id="chart-section">
+      <h2>Spending by Category</h2>
+      <div id="chart-container">
+        <div id="chart-fallback" style="display:none;">
+          Chart could not be loaded. Please check your internet connection.
+        </div>
+        <p id="chart-no-data">No data to display.</p>
+        <canvas id="expense-chart" aria-label="Spending pie chart" role="img"></canvas>
+      </div>
+    </section>
+
+  </div><!-- /#app-container -->
+
+  <!-- Chart.js from CDN — onerror shows fallback if CDN fails -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/chart.js"
+    onerror="document.getElementById('chart-fallback').style.display='block'"
+  ></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
